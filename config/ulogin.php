@@ -10,29 +10,30 @@ return array
 	
 	// Сервисы, выводимые сразу
 	'providers'		=> array(
-		'vkontakte',
-		'facebook',
-		'twitter',
-		'google',
+//		'vkontakte',
+//		'facebook',
+//		'twitter',
+//		'google',
 	),
 	
 	// Выводимые при наведении
 	'hidden' 		=> array(
-		'odnoklassniki',
-		'mailru',
-		'livejournal',
-		'openid'
+//		'odnoklassniki',
+//		'mailru',
+//		'livejournal',
+//		'openid'
 	),
 	
 	// Эти поля используются для поля username в таблице users
 	'username' 		=> array (
-		'first_name',
-		'last_name',
+//		 'email',
+//		 'first_name',
+//		 'last_name',
 	),
 	
 	// Обязательные поля
 	'fields' 		=> array(
-		'email',
+//		 'email',
 	),
 	
 	// Необязательные поля
