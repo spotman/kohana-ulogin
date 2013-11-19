@@ -3,14 +3,15 @@
 class Kohana_Ulogin {
     
     protected $config = array(
+
         // Возможные значения: small, panel, window
-        'type'             => 'panel',
+        'type'              => 'panel',
         
         // на какой адрес придёт POST-запрос от uLogin
-        'redirect_uri'     => NULL,
+        'redirect_uri'      => NULL,
         
         // Сервисы, выводимые сразу
-        'providers'        => array(
+        'providers'         => array(
             'vkontakte',
             'facebook',
             'twitter',
@@ -18,7 +19,7 @@ class Kohana_Ulogin {
         ),
         
         // Выводимые при наведении
-        'hidden'         => array(
+        'hidden'            => array(
             'odnoklassniki',
             'mailru',
             'livejournal',
@@ -26,17 +27,20 @@ class Kohana_Ulogin {
         ),
         
         // Эти поля используются для значения поля username в таблице users
-        'username'         => array (
+        'username'          => array (
             'first_name',
         ),
         
         // Обязательные поля
-        'fields'         => array(
+        'fields'            => array(
             'email',
         ),
         
         // Необязательные поля
-        'optional'        => array(),
+        'optional'          => array(),
+
+        // Требовать подтверждения адреса электронной почты?
+        'verify_email'      =>  FALSE
     );
     
     protected static $_used_ids = array();
@@ -50,20 +54,25 @@ class Kohana_Ulogin {
     {
         $this->config = array_merge($this->config, Kohana::$config->load('ulogin')->as_array(), $config);
         
-        if ( $this->config['redirect_uri'] === NULL )
+        if ( $this->get_redirect_uri() === NULL )
         {
-            $this->config['redirect_uri'] = Request::initial()->url(true);
+            $this->set_redirect_uri(Request::initial()->url(true));
         }
     }
-    
+
+    /**
+     * Creates string representation of the widget
+     * @return string
+     */
     public function render()
     {    
         $params =     
             'display='.$this->config['type'].
+            ( $this->config['verify_email'] ? '&verify=1' : '' ).
             '&fields='.implode(',', array_merge($this->config['username'], $this->config['fields'])).
             '&providers='.implode(',', $this->config['providers']).
             '&hidden='.implode(',', $this->config['hidden']).
-            '&redirect_uri='.$this->config['redirect_uri'].
+            '&redirect_uri='.$this->get_redirect_uri().
             '&optional='.implode(',', $this->config['optional']);
         
         $view = View::factory('ulogin/ulogin')
@@ -94,48 +103,69 @@ class Kohana_Ulogin {
         {
             return $this->render();
         }
-        catch(Exception $e)
+        catch ( Exception $e )
         {
             Kohana_Exception::handler($e);
             return '';
         }
     }
-    
+
+    /**
+     * Auth method
+     * redirect_uri must route to action, calling this method
+     * @throws Ulogin_Exception
+     */
     public function login()
     {
-        if ( empty($_POST['token']) )
-            throw new Kohana_Exception('Empty token.');
+        if ( ! $this->mode() )
+            throw new Ulogin_Exception('Empty token.');
 
         $token = $_POST['token'];
         $user_info = $this->request_user_info($token);
 
-        $ulogin = ORM::factory('Ulogin', array('identity' => $user_info['identity']));
-        
-        if ( ! $ulogin->loaded() )
+        $model = $this->find_ulogin($user_info['identity']);
+
+        $user_orm = $this->get_user();
+
+        if ( $model->loaded() )
         {
-            if ( ($user_orm = Auth::instance()->get_user()) )
+            if ( ! $user_orm )
             {
-                $this->create_ulogin($ulogin, $user_info);
-            }
-            else
-            {
-                $data = $this->prepare_new_user_data($user_info);
-
-                $user_orm = $this->create_new_user($data);
-                
-                $user_info['user_id'] = $user_orm->pk();
-                
-                $this->create_ulogin($ulogin, $user_info);
-
-                $this->force_login($user_orm);
+                // Log in with user, linked to identity
+                $this->force_login($model->get_user());
             }
         }
         else
         {
-            $this->force_login($ulogin->user);
+            // If user is authorized
+            if ( $user_orm )
+            {
+                // Add another identity to current user
+                $this->create_ulogin($model, $user_orm, $user_info);
+            }
+            else
+            {
+                // Create new user
+                $user_orm = $this->create_new_user($user_info);
+
+                // Create ulogin identity for new user
+                $this->create_ulogin($model, $user_orm, $user_info);
+
+                // Log in
+                $this->force_login($user_orm);
+            }
         }
     }
-    
+
+    /**
+     * @param $identity
+     * @return Model_Ulogin
+     */
+    protected function find_ulogin($identity)
+    {
+        return ORM::factory('Ulogin', array('identity' => $identity));
+    }
+
     public function mode()
     {
         return !empty($_POST['token']);
@@ -143,20 +173,10 @@ class Kohana_Ulogin {
 
     protected function prepare_new_user_data($user_info)
     {
-        $data = array(
-            'username' => $this->prepare_username($user_info),
-            'password' => $this->generate_password()
-        );
+        $data = $this->prepare_custom_fields($user_info);
 
-        $cfg_fields = array_merge($this->config['fields'], $this->config['optional']);
-
-        foreach ( $cfg_fields as $field )
-        {
-            if ( ! empty($user_info[$field]) )
-            {
-                $data[$field] = $user_info[$field];
-            }
-        }
+        $data['username'] = $this->prepare_username($user_info);
+        $data['password'] = $this->generate_password();
 
         return $data;
     }
@@ -183,25 +203,68 @@ class Kohana_Ulogin {
         return md5('ulogin_autogenerated_password'.microtime(TRUE));
     }
 
-    protected function create_ulogin(Model_Ulogin $ulogin, $post)
+    protected function prepare_custom_fields($user_info)
     {
-        return $ulogin->values($post, array(
-            'user_id',
-            'identity',
-            'network',
-        ))->create();
+        $data = array();
+
+        $cfg_fields = array_merge($this->config['fields'], $this->config['optional']);
+
+        foreach ( $cfg_fields as $field )
+        {
+            if ( ! empty($user_info[$field]) )
+            {
+                $data[$field] = $user_info[$field];
+            }
+        }
+
+        return $data;
     }
 
-    protected function create_new_user(array $data)
+    protected function create_ulogin(Model_Ulogin $ulogin, $user, $data)
     {
-        $orm_user = ORM::factory('User')->values($data)->create();
-        $orm_user->add('roles', ORM::factory('Role', array('name' => 'login')));
-        return $orm_user;
+        return $ulogin
+            ->set_user($user)
+            ->values($data, array('identity', 'network'))
+            ->create();
+    }
+
+    protected function create_new_user($user_info)
+    {
+        $data = $this->prepare_new_user_data($user_info);
+
+        $email = $user_info['email'];
+
+        if ( ! $email )
+            throw new Ulogin_Exception('Can not create user with empty email');
+
+        $user_orm = ORM::factory('User', array('email' => $email));
+
+        // If user with current email does not exists
+        if ( ! $user_orm->loaded() )
+        {
+            $user_orm
+                ->values($data)
+                ->create()
+                ->add('roles', ORM::factory('Role', array('name' => 'login')));
+        }
+        // User exists - possible duplicate/hijack - does email verified?
+        else if ( ! $this->config['verify_email'] AND $user_info['verified_email'] != 1 )
+        {
+            // TODO deal with this situation
+            throw new Ulogin_Exception('There is another user with verified email :email', array(':email' => $email));
+        }
+
+        return $user_orm;
+    }
+
+    protected function get_user()
+    {
+        return Auth::instance()->get_user();
     }
 
     protected function force_login($user)
     {
-        Auth::instance()->force_login($user);
+        return Auth::instance()->force_login($user);
     }
 
     protected function request_user_info($token)
@@ -219,5 +282,17 @@ class Kohana_Ulogin {
 
         return $domain;
     }
+
+    public function get_redirect_uri()
+    {
+        return $this->config['redirect_uri'];
+    }
+
+    public function set_redirect_uri($value)
+    {
+        $this->config['redirect_uri'] = $value;
+        return $this;
+    }
+
 
 }

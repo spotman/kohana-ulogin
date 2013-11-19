@@ -20,4 +20,15 @@ class Model_Kohana_Ulogin extends ORM {
 			),
 		);
 	}
+
+    public function get_user()
+    {
+        return $this->get('user');
+    }
+
+    public function set_user(ORM $user)
+    {
+        $this->set('user', $user);
+        return $this;
+    }
 }
