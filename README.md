@@ -1,10 +1,14 @@
 uLogin - виджет авторизации через социальные сети
-=================================================
+-------------------------------------------------
 
 Donate link: http://ulogin.ru/
+
 Tags: ulogin, login, social, authorization
+
 Stable tag: 1.7
+
 License: GPL3
+
 Форма авторизации uLogin через социальные сети. Улучшенный аналог loginza.
 
 
@@ -25,6 +29,7 @@ CREATE TABLE `ulogins` (
 	UNIQUE INDEX `identity` (`identity`)
 )
 ```
+
 2. Добавить `'ulogins' => array()`, в `protected $_has_many` у *Model_User*
 
 ЧаВо
