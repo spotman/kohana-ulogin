@@ -7,7 +7,7 @@ class Kohana_Ulogin {
         // Возможные значения: small, panel, window
         'type'              => 'panel',
         
-        // на какой адрес придёт POST-запрос от uLogin
+        // На какой адрес придёт POST-запрос от uLogin (адрес до контроллера/экшна, вызывающего метод Ulogin::login())
         'redirect_uri'      => NULL,
         
         // Сервисы, выводимые сразу
@@ -40,10 +40,15 @@ class Kohana_Ulogin {
         'optional'          => array(),
 
         // Требовать подтверждения адреса электронной почты?
-        'verify_email'      =>  FALSE
+        'verify_email'      =>  FALSE,
+
+        // Имя коллбэк-функции для авторизации по токену (по умолчанию используется встроенная)
+        'javascript_callback'   =>  NULL,
     );
     
     protected static $_used_ids = array();
+
+    protected $_widget_id;
     
     public static function factory(array $config = array())
     {
@@ -53,10 +58,13 @@ class Kohana_Ulogin {
     public function __construct(array $config = array())
     {
         $this->config = array_merge($this->config, Kohana::$config->load('ulogin')->as_array(), $config);
-        
+
+        $current_url = Request::initial()->url(true);
+
+        // Устанавливаем дефолтный адрес для авторизации
         if ( $this->get_redirect_uri() === NULL )
         {
-            $this->set_redirect_uri(Request::initial()->url(true));
+            $this->set_redirect_uri($current_url);
         }
     }
 
@@ -65,23 +73,53 @@ class Kohana_Ulogin {
      * @return string
      */
     public function render()
-    {    
-        $params =     
+    {
+        $auth_callback = $this->get_javascript_callback();
+
+        // Есди указана функция-коллбэк
+        if ( $auth_callback )
+        {
+            // Убираем адрес для перенаправления (согласно инструкции http://ulogin.ru/help.php#faq)
+            $this->set_redirect_uri(NULL);
+        }
+
+        $params =
             'display='.$this->config['type'].
             ( $this->config['verify_email'] ? '&verify=1' : '' ).
             '&fields='.implode(',', array_merge($this->config['username'], $this->config['fields'])).
             '&providers='.implode(',', $this->config['providers']).
             '&hidden='.implode(',', $this->config['hidden']).
             '&redirect_uri='.$this->get_redirect_uri().
+            ( $auth_callback ? '&callback='.$auth_callback : '' ).
             '&optional='.implode(',', $this->config['optional']);
         
-        $view = View::factory('ulogin/ulogin')
-                    ->set('cfg', $this->config)
-                    ->set('params', $params);
+        $view = $this->view_factory('ulogin/ulogin');
 
-        $view->set('uniq_id', $this->generate_unique_id());
-        
+        $view_data = array(
+            'cfg'               =>  $this->config,
+            'uniq_id'           =>  $this->get_widget_id(),
+            'params'            =>  $params,
+            'redirect_uri'      =>  $this->get_redirect_uri(),
+        );
+
+        $view->set($view_data);
+
         return $view->render();
+    }
+
+    protected function view_factory($file)
+    {
+        return View::factory($file);
+    }
+
+    public function get_widget_id()
+    {
+        if ( ! $this->_widget_id )
+        {
+            $this->_widget_id = $this->generate_unique_id();
+        }
+
+        return $this->_widget_id;
     }
 
     /**
@@ -358,6 +396,17 @@ class Kohana_Ulogin {
     public function set_redirect_uri($value)
     {
         $this->config['redirect_uri'] = $value;
+        return $this;
+    }
+
+    public function get_javascript_callback()
+    {
+        return $this->config['javascript_callback'];
+    }
+
+    public function set_javascript_callback($value)
+    {
+        $this->config['javascript_callback'] = $value;
         return $this;
     }
 
