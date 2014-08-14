@@ -331,7 +331,9 @@ class Kohana_Ulogin {
         {
             // Можно создавать нового
             $data = $this->prepare_new_user_data($user_info);
-            return $this->create_new_user($data);
+            $new_user = $this->create_new_user($data);
+            $this->process_new_user($new_user, $user_info);
+            return $new_user;
         }
         // Пользователь есть - возможный дубликат - а у нового подтверждённый email?
         else if ( $this->config['verify_email'] OR $user_info->verified_email() )
@@ -346,10 +348,15 @@ class Kohana_Ulogin {
         throw new Ulogin_Exception('There is another user with verified email :email', array(':email' => $email));
     }
 
+    protected function process_new_user(Model_User $user, Ulogin_Request $user_info)
+    {
+        // Empty by default
+    }
+
     /**
      * Создаёт нового пользователя на основе подготовленного массива данных
      * @param array $user_data
-     * @return ORM
+     * @return Model_User
      */
     protected function create_new_user(array $user_data)
     {
