@@ -1,4 +1,4 @@
-<script src="http://ulogin.ru/js/ulogin.js"></script>
+<script src="//ulogin.ru/js/ulogin.js"></script>
 
 <?php if ($cfg['type'] == 'window') :?>
 
