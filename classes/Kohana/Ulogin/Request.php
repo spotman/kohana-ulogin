@@ -33,7 +33,7 @@ class Kohana_Ulogin_Request {
      */
     protected function fetch($token)
     {
-        $s = Request::factory('http://ulogin.ru/token.php?token='.$token.'&host='.$this->get_domain())->execute()->body();
+        $s = Request::factory('https://ulogin.ru/token.php?token='.$token.'&host='.$this->get_domain())->execute()->body();
         $data = json_decode($s, true);
 
         if ( isset( $data['error'] ) )
