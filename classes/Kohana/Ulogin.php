@@ -145,7 +145,7 @@ class Kohana_Ulogin {
         {
             return $this->render();
         }
-        catch ( Exception $e )
+        catch (Throwable $e)
         {
             Kohana_Exception::handler($e);
             return '';
