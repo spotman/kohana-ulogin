@@ -348,7 +348,7 @@ class Kohana_Ulogin {
         throw new Ulogin_Exception('There is another user with verified email :email', array(':email' => $email));
     }
 
-    protected function process_new_user(Model_User $user, Ulogin_Request $user_info)
+    protected function process_new_user($user, Ulogin_Request $user_info)
     {
         // Empty by default
     }
