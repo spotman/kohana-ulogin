@@ -59,10 +59,11 @@ class Kohana_Ulogin {
     {
         $this->config = array_merge($this->config, Kohana::$config->load('ulogin')->as_array(), $config);
 
-        $current_url = Request::initial()->url(true);
+        $current_request = Request::initial();
+        $current_url = $current_request ? $current_request->url(true) : null;
 
         // Устанавливаем дефолтный адрес для авторизации
-        if ( $this->get_redirect_uri() === NULL )
+        if ( $current_request && $this->get_redirect_uri() === NULL )
         {
             $this->set_redirect_uri($current_url);
         }
